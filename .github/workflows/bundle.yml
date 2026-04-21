@@ -1,0 +1,72 @@
+name: Git Bundle Export
+
+on:
+  workflow_dispatch:
+    inputs:
+      repo:
+        description: 'GitHub repo (owner/name)'
+        required: true
+      mode:
+        description: 'bare (branches+tags) or mirror (all refs)'
+        required: false
+        default: 'bare'
+      branch:
+        description: 'Specific branch (leave empty for default)'
+        required: false
+        default: ''
+
+jobs:
+  bundle:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: Clone target repo
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          REPO="${{ inputs.repo }}"
+          MODE="${{ inputs.mode }}"
+          BRANCH="${{ inputs.branch }}"
+          CLONE_URL="https://github.com/${REPO}.git"
+
+          echo "## Target"
+          echo "repo=${REPO}"
+          echo "mode=${MODE}"
+          echo "branch=${BRANCH:-default}"
+
+          if [ "$MODE" = "mirror" ]; then
+            echo "Cloning full mirror..."
+            git clone --mirror "$CLONE_URL" repo.git
+          else
+            echo "Cloning bare (branches + tags only, no PR refs)..."
+            if [ -n "$BRANCH" ]; then
+              git clone --bare --single-branch --branch "$BRANCH" "$CLONE_URL" repo.git
+              cd repo.git
+              git fetch origin '+refs/tags/*:refs/tags/*'
+              cd ..
+            else
+              git clone --bare "$CLONE_URL" repo.git
+            fi
+          fi
+
+      - name: Create bundle
+        run: |
+          cd repo.git
+          echo "## Bundle Info"
+          git count-objects -vH
+          git bundle create ../repo.bundle --all
+          cd ..
+          ls -lh repo.bundle
+
+      - name: Verify bundle
+        run: |
+          git bundle verify repo.bundle
+          echo "verify_exit_code=$?"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: git-bundle-${{ inputs.repo }}
+          path: repo.bundle
+          retention-days: 1
+          compression-level: 0
