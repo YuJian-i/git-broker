@@ -60,8 +60,8 @@ jobs:
 
       - name: Verify bundle
         run: |
-          git bundle verify repo.bundle
-          echo "verify_exit_code=$?"
+          mkdir -p /tmp/verify && cd /tmp/verify && git init
+          git -C /tmp/verify bundle verify "$GITHUB_WORKSPACE/repo.bundle"
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
